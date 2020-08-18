@@ -1,3 +1,4 @@
+import argparse
 import sys
 
 import mistune
@@ -12,7 +13,6 @@ class ConfluenceWikiRender(mistune.HTMLRenderer):
         super(ConfluenceWikiRender, self).__init__()
         self._escape = escape
         self._allow_harmful_protocols = allow_harmful_protocols
-        self._list_stack = []
 
     def autolink(self, link, is_email=False):
         if is_email:
@@ -21,7 +21,7 @@ class ConfluenceWikiRender(mistune.HTMLRenderer):
 
     def block_code(self, code, lang=None):
         # inner = mistune.escape(code)
-        return '\n{{code:theme=FadeToGrey|linenumbers=true}}\n{inner}\n{{code}}\n'.format(inner=code)
+        return '\n{{code:theme=FadeToGrey|linenumbers=true}}\n{inner}{{code}}\n'.format(inner=code)
 
     def block_html(self, html):
         raise NotImplementedError('Does not support raw html yet. See confluence macro html')
@@ -34,7 +34,7 @@ class ConfluenceWikiRender(mistune.HTMLRenderer):
         # inner = mistune.escape(text)
         return '{{{{{inner}}}}}'.format(inner=text)
 
-    def double_emphasis(text):
+    def strong(self, text):
         # strong/bold text
         return '*{inner}*'.format(inner=text)
 
@@ -42,23 +42,18 @@ class ConfluenceWikiRender(mistune.HTMLRenderer):
         return '{{_}}{inner}{{_}}'.format(inner=text)
 
     def footnote_item(self, key, text):
-        print('footnote (no support):', key, text)
         return ''
 
     def footnote_ref(self, key, index):
-        print('footnote_ref:', key, index)
         return ''
 
     def footnotes(self, text):
-        print('footnotes')
         return ''
 
-    def header(self, text, level, raw=None):
-        print('header:')
-        print(text, level, raw)
+    def heading(self, text, level, raw=None):
         assert level >= 1, "heading level >= 1 condition is not met up"
         level = 6 if level > 6 else level
-        return '\nh{level}. {inner}'.format(level=level, inner=text)
+        return '\nh{level}. {inner}\n'.format(level=level, inner=text)
 
     def hrule(self):
         return '----'
@@ -76,27 +71,23 @@ class ConfluenceWikiRender(mistune.HTMLRenderer):
         return '[{title}|{inner}]'.format(title=title, inner=link)
 
     def list(self, body, ordered, level, start=None):
-        print('list', level, body)
+        bodies = body.strip('\n').split('\n')
         if ordered:
-            self._list_stack += 'ordered'
+            prefix = '#'
         else:
-            self._list_stack += 'unordered'
-        return body
+            prefix = '*'
+        bodies = ['{prefix}{inner}'.format(prefix=prefix, inner=inner) for inner in bodies if inner]
+        body = '\n'.join(bodies)
+        return '\n' + body + '\n'
 
     def list_item(self, text, level):
-        print('list_item', level, text)
-        prefix = '*' * level
-        return '\n{prefix} {inner}'.format(prefix=prefix, inner=text)
+        return ' {text}\n'.format(text=text)
 
     def newline(self):
         return '\n'
 
     def paragraph(self, text):
-        return '\n' + text
-
-    def placeholder(self):
-        print('placeholder')
-        return ''
+        return '\n' + text + '\n'
 
     def strikethrough(self, text):
         return '-{inner}-'.format(inner=text)
@@ -113,18 +104,20 @@ class ConfluenceWikiRender(mistune.HTMLRenderer):
     def text(self, text):
         return text
 
+if __name__ == '__main__':
+    markdown = mistune.Markdown(
+        renderer=ConfluenceWikiRender(),
+    )
 
-markdown = mistune.Markdown(
-    renderer=ConfluenceWikiRender(),
-)
-print(markdown('''
-* hello
-* world
-  * and you
-* now
-'''),
-    file=sys.stderr)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('markdown_file', help='a markdown file path or use "-" to use stdin')
+    args = parser.parse_args()
 
-# with open('Using-local-filesystem-module-to-replace-online.md', 'r') as f:
-#     print(markdown(f.read()), file=sys.stderr)
+    if args.markdown_file == '-':
+        source = sys.stdin.read()
+    else:
+        with open(args.markdown_file, 'r') as f:
+            source = f.read()
+    output = markdown(source).strip('\n')
+    print(output, file=sys.stderr)
 
